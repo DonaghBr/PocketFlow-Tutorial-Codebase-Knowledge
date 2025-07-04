@@ -5,6 +5,201 @@ from utils.crawl_github_files import crawl_github_files
 from utils.call_llm import call_llm
 from utils.crawl_local_files import crawl_local_files
 
+# Documentation Style Configuration
+DOCUMENTATION_STYLE_CONFIG = {
+    # Overall style settings
+    "target_audience": "beginner-friendly",  # Options: "beginner-friendly", "intermediate", "advanced", "technical"
+    "tone": "welcoming",  # Options: "welcoming", "formal", "concise", "academic"
+    "code_block_max_lines": 20,
+    "use_analogies": True,
+    "use_mermaid_diagrams": True,
+    
+    # Documentation structure type
+    "doc_structure": "tutorial",  # Options: "tutorial", "structured", "reference"
+    
+    # Chapter structure template
+    "chapter_sections": [
+        "motivation_and_use_case",
+        "key_concepts", 
+        "usage_examples",
+        "internal_implementation",
+        "code_deep_dive",
+        "conclusion_and_transitions"
+    ],
+    
+    # Content requirements
+    "require_transitions": True,
+    "require_mermaid": True,
+    "require_code_examples": True,
+    "require_cross_references": True,
+    "max_mermaid_participants": 5,
+    
+    # Style-specific prompts
+    "style_prompts": {
+        "beginner-friendly": "Write in a very beginner-friendly way with analogies and simple explanations",
+        "intermediate": "Write for developers with some experience, focus on practical implementation",
+        "advanced": "Write for experienced developers, emphasize architecture and design patterns",
+        "technical": "Write in a technical reference style with precise terminology and comprehensive details"
+    },
+    
+    # Custom section templates
+    "section_templates": {
+        "motivation_and_use_case": "- Begin with a high-level motivation explaining what problem this abstraction solves. Start with a central use case as a concrete example.",
+        "key_concepts": "- If the abstraction is complex, break it down into key concepts. Explain each concept one-by-one.",
+        "usage_examples": "- Explain how to use this abstraction to solve the use case. Give example inputs and outputs for code snippets.",
+        "internal_implementation": "- Describe the internal implementation to help understand what's under the hood. First provide a non-code walkthrough.",
+        "code_deep_dive": "- Then dive deeper into code for the internal implementation with references to files. Provide example code blocks.",
+        "conclusion_and_transitions": "- End the chapter with a brief conclusion that summarizes what was learned and provides a transition to the next chapter."
+    }
+}
+
+# Structured Content Type Templates
+STRUCTURED_CONTENT_TYPES = {
+    "concept": {
+        "purpose": "Explain what something is and why it matters",
+        "structure": [
+            "definition",
+            "purpose_and_benefits", 
+            "key_characteristics",
+            "relationships_to_other_concepts",
+            "examples"
+        ],
+        "templates": {
+            "definition": "## Definition\n\nProvide a clear, concise definition of the concept.",
+            "purpose_and_benefits": "## Purpose and Benefits\n\nExplain why this concept exists and what problems it solves.",
+            "key_characteristics": "## Key Characteristics\n\nList and explain the main properties or features.",
+            "relationships_to_other_concepts": "## Relationships\n\nDescribe how this concept relates to other concepts in the system.",
+            "examples": "## Examples\n\nProvide concrete examples to illustrate the concept."
+        }
+    },
+    
+    "procedure": {
+        "purpose": "Provide step-by-step instructions for completing a task",
+        "structure": [
+            "prerequisites",
+            "overview",
+            "steps",
+            "verification",
+            "troubleshooting"
+        ],
+        "templates": {
+            "prerequisites": "## Prerequisites\n\nList what needs to be in place before starting.",
+            "overview": "## Overview\n\nBrief summary of what this procedure accomplishes.",
+            "steps": "## Steps\n\nNumbered list of actions to take.",
+            "verification": "## Verification\n\nHow to confirm the procedure was successful.",
+            "troubleshooting": "## Troubleshooting\n\nCommon issues and their solutions."
+        }
+    },
+    
+    "reference": {
+        "purpose": "Provide comprehensive technical details for lookup",
+        "structure": [
+            "overview",
+            "api_reference",
+            "parameters",
+            "return_values",
+            "examples",
+            "notes"
+        ],
+        "templates": {
+            "overview": "## Overview\n\nBrief technical summary of the component.",
+            "api_reference": "## API Reference\n\nComplete method signatures and interfaces.",
+            "parameters": "## Parameters\n\nDetailed parameter descriptions with types and constraints.",
+            "return_values": "## Return Values\n\nWhat the component returns, including types and possible values.",
+            "examples": "## Examples\n\nCode examples showing typical usage patterns.",
+            "notes": "## Notes\n\nImportant implementation details, limitations, or warnings."
+        }
+    }
+}
+
+def get_style_config():
+    """Get the current documentation style configuration, allowing environment variable overrides"""
+    config = DOCUMENTATION_STYLE_CONFIG.copy()
+    
+    # Allow environment variable overrides
+    target_audience = os.getenv("DOC_TARGET_AUDIENCE")
+    if target_audience:
+        config["target_audience"] = target_audience
+    
+    tone = os.getenv("DOC_TONE")
+    if tone:
+        config["tone"] = tone
+    
+    code_max_lines = os.getenv("DOC_CODE_MAX_LINES")
+    if code_max_lines:
+        config["code_block_max_lines"] = int(code_max_lines)
+    
+    use_analogies = os.getenv("DOC_USE_ANALOGIES")
+    if use_analogies:
+        config["use_analogies"] = use_analogies.lower() == 'true'
+    
+    use_mermaid = os.getenv("DOC_USE_MERMAID")
+    if use_mermaid:
+        config["use_mermaid_diagrams"] = use_mermaid.lower() == 'true'
+    
+    doc_structure = os.getenv("DOC_STRUCTURE")
+    if doc_structure:
+        config["doc_structure"] = doc_structure
+        
+    return config
+
+def determine_content_type(abstraction_details):
+    """Determine the appropriate content type for an abstraction"""
+    name = abstraction_details["name"].lower()
+    description = abstraction_details["description"].lower()
+    
+    # Simple heuristics - you can make these more sophisticated
+    if any(keyword in name + description for keyword in ["api", "interface", "method", "function", "class"]):
+        return "reference"
+    elif any(keyword in name + description for keyword in ["process", "workflow", "step", "procedure", "how to"]):
+        return "procedure"
+    else:
+        return "concept"  # Default
+
+def build_structured_content_prompt(item, content_type, language_instruction, notes):
+    """Build a prompt for structured content types"""
+    abstraction_name = item["abstraction_details"]["name"]
+    abstraction_description = item["abstraction_details"]["description"]
+    chapter_num = item["chapter_num"]
+    project_name = item.get("project_name")
+    language = item.get("language", "english")
+    
+    content_config = STRUCTURED_CONTENT_TYPES[content_type]
+    
+    # Build section instructions
+    section_instructions = []
+    for section in content_config["structure"]:
+        if section in content_config["templates"]:
+            section_instructions.append(content_config["templates"][section])
+    
+    prompt = f"""
+{language_instruction}Create a {content_type.upper()} document for the project `{project_name}` about: "{abstraction_name}".
+
+Purpose: {content_config["purpose"]}
+
+Concept Details{notes.get('concept_details_note', '')}:
+- Name: {abstraction_name}
+- Description: {abstraction_description}
+
+Relevant Code Snippets:
+{item.get("file_context_str", "No specific code snippets provided.")}
+
+Structure your {content_type} document with these sections:
+
+{chr(10).join(section_instructions)}
+
+Guidelines:
+- Use clear, precise language appropriate for {content_type} documentation
+- Include code examples where relevant
+- Cross-reference related components when appropriate
+- Focus on practical, actionable information
+- Start with: # {abstraction_name} ({content_type.title()})
+
+Generate the complete {content_type} document in Markdown format:
+"""
+    
+    return prompt
+
 # Helper to get content for specific file indices
 def get_content_for_indices(files_data, indices):
     content_map = {}
@@ -65,9 +260,11 @@ class FetchRepo(Node):
             )
 
         # Convert dict to list of tuples: [(path, content), ...]
+        if result is None:
+            raise ValueError("Failed to fetch files - no result returned")
         files_list = list(result.get("files", {}).items())
         if len(files_list) == 0:
-            raise(ValueError("Failed to fetch files"))
+            raise ValueError("Failed to fetch files")
         print(f"Fetched {len(files_list)} files.")
         return files_list
 
@@ -154,7 +351,7 @@ Format the output as a YAML list of dictionaries:
         # Robust YAML parsing to handle Granite's nested format
         try:
             ordered_indices_raw = yaml.safe_load(yaml_str)
-        except yaml.parser.ParserError:
+        except yaml.YAMLError:
             # If YAML parsing fails, try to extract indices from malformed output
             lines = yaml_str.strip().split('\n')
             ordered_indices_raw = []
@@ -289,6 +486,8 @@ Context (Abstractions, Descriptions, Code):
     Ideally the relationship should be backed by one abstraction calling or passing parameters to another.
     Simplify the relationship and exclude those non-important ones.
 
+CRITICAL: The abstraction indices above range from 0 to {len(abstraction_listing.split('\n')) - 1} (inclusive). Only use these valid indices in your relationships - do not use any index >= {len(abstraction_listing.split('\n'))}.
+
 IMPORTANT: Make sure EVERY abstraction is involved in at least ONE relationship (either as source or target). Each abstraction index must appear at least once across all relationships.
 
 Format the output as YAML:
@@ -338,16 +537,29 @@ Now, provide the YAML output:
                  from_idx = int(str(rel["from_abstraction"]).split('#')[0].strip())
                  to_idx = int(str(rel["to_abstraction"]).split('#')[0].strip())
                  if not (0 <= from_idx < num_abstractions and 0 <= to_idx < num_abstractions):
-                      raise ValueError(f"Invalid index in relationship: from={from_idx}, to={to_idx}. Max index is {num_abstractions-1}.")
+                      print(f"Warning: Skipping invalid relationship - from={from_idx}, to={to_idx}. Max valid index is {num_abstractions-1}.")
+                      continue  # Skip this relationship instead of crashing
                  validated_relationships.append({
                      "from": from_idx,
                      "to": to_idx,
                      "label": rel["label"] # Potentially translated label
                  })
              except (ValueError, TypeError):
-                  raise ValueError(f"Could not parse indices from relationship: {rel}")
+                  print(f"Warning: Could not parse indices from relationship: {rel}. Skipping.")
+                  continue  # Skip this relationship instead of crashing
 
-        print("Generated project summary and relationship details.")
+        # Ensure we have at least some relationships
+        if len(validated_relationships) == 0:
+            print("Warning: No valid relationships were generated. Creating default relationships.")
+            # Create simple sequential relationships as fallback
+            for i in range(min(3, num_abstractions - 1)):  # Create up to 3 basic relationships
+                validated_relationships.append({
+                    "from": i,
+                    "to": i + 1,
+                    "label": "relates to"
+                })
+
+        print(f"Generated project summary and {len(validated_relationships)} valid relationship(s).")
         return {
             "summary": relationships_data["summary"], # Potentially translated summary
             "details": validated_relationships # Store validated, index-based relationships with potentially translated labels
@@ -427,7 +639,7 @@ Now, provide the YAML output:
         # Robust YAML parsing to handle Granite's nested format
         try:
             ordered_indices_raw = yaml.safe_load(yaml_str)
-        except yaml.parser.ParserError:
+        except yaml.YAMLError:
             # If YAML parsing fails, try to extract indices from malformed output
             lines = yaml_str.strip().split('\n')
             ordered_indices_raw = []
@@ -556,6 +768,68 @@ class WriteChapters(BatchNode):
         print(f"Preparing to write {len(items_to_process)} chapters...")
         return items_to_process # Iterable for BatchNode
 
+    def build_customized_prompt(self, item, style_config, language_instruction, notes):
+        """Build a customized chapter prompt based on style configuration"""
+        abstraction_name = item["abstraction_details"]["name"]
+        abstraction_description = item["abstraction_details"]["description"]
+        chapter_num = item["chapter_num"]
+        project_name = item.get("project_name")
+        language = item.get("language", "english")
+        
+        # Get the style-specific prompt
+        target_audience = style_config["target_audience"]
+        tone = style_config["tone"]
+        style_prompt = style_config["style_prompts"].get(target_audience, "Write clearly and concisely")
+        
+        # Build section instructions dynamically
+        section_instructions = []
+        for section in style_config["chapter_sections"]:
+            if section in style_config["section_templates"]:
+                template = style_config["section_templates"][section]
+                
+                # Customize based on configuration
+                if section == "usage_examples" and style_config["code_block_max_lines"] != 20:
+                    template = template.replace("BELOW 20 lines", f"BELOW {style_config['code_block_max_lines']} lines")
+                
+                if section == "internal_implementation" and not style_config["use_mermaid_diagrams"]:
+                    template = template.replace("use a simple sequenceDiagram", "provide a detailed textual explanation")
+                
+                if section == "key_concepts" and not style_config["use_analogies"]:
+                    template = template.replace("with analogies", "with clear technical explanations")
+                
+                section_instructions.append(template)
+        
+        # Build the customized prompt
+        prompt = f"""
+{language_instruction}{style_prompt} tutorial chapter (in Markdown format) for the project `{project_name}` about the concept: "{abstraction_name}". This is Chapter {chapter_num}.
+
+Concept Details{notes['concept_details_note']}:
+- Name: {abstraction_name}
+- Description:
+{abstraction_description}
+
+Complete Tutorial Structure{notes['structure_note']}:
+{item["full_chapter_listing"]}
+
+Context from previous chapters{notes['prev_summary_note']}:
+{item.get("previous_chapters_summary", "This is the first chapter.")}
+
+Relevant Code Snippets (Code itself remains unchanged):
+{item.get("file_context_str", "No specific code snippets provided for this abstraction.")}
+
+Instructions for the chapter (Generate content in {language.capitalize()} unless specified otherwise):
+- Start with a clear heading (e.g., `# Chapter {chapter_num}: {abstraction_name}`). Use the provided concept name.
+
+{chr(10).join(section_instructions)}
+
+- Output *only* the Markdown content for this chapter.
+
+Target Audience: {target_audience.replace('_', ' ').title()}
+Tone: {tone.replace('_', ' ').title()}
+"""
+        
+        return prompt
+
     def exec(self, item):
         # This runs for each item prepared above
         abstraction_name = item["abstraction_details"]["name"] # Potentially translated name
@@ -565,11 +839,17 @@ class WriteChapters(BatchNode):
         language = item.get("language", "english")
         print(f"Writing chapter {chapter_num} for: {abstraction_name} using LLM...")
 
+        # Get style configuration
+        style_config = get_style_config()
+
         # Prepare file context string from the map
         file_context_str = "\n\n".join(
             f"--- File: {idx_path.split('# ')[1] if '# ' in idx_path else idx_path} ---\n{content}"
             for idx_path, content in item["related_files_content_map"].items()
         )
+        
+        # Add file context to item for structured content
+        item["file_context_str"] = file_context_str
 
         # Get summary of chapters written *before* this one
         # Use the temporary instance variable
@@ -597,8 +877,21 @@ class WriteChapters(BatchNode):
             link_lang_note = f" (Use the {lang_cap} chapter title from the structure above)"
             tone_note = f" (appropriate for {lang_cap} readers)"
 
-
-        prompt = f"""
+        # Choose between traditional tutorial or structured content
+        if style_config.get("doc_structure") == "structured":
+            # Determine content type automatically
+            content_type = determine_content_type(item["abstraction_details"])
+            print(f"  - Using structured content type: {content_type}")
+            
+            # Build notes for structured content
+            notes = {
+                'concept_details_note': concept_details_note
+            }
+            
+            prompt = build_structured_content_prompt(item, content_type, language_instruction, notes)
+        else:
+            # Traditional tutorial approach
+            prompt = f"""
 {language_instruction}Write a very beginner-friendly tutorial chapter (in Markdown format) for the project `{project_name}` about the concept: "{abstraction_name}". This is Chapter {chapter_num}.
 
 Concept Details{concept_details_note}:

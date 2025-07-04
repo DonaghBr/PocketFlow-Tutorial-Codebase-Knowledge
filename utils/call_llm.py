@@ -47,7 +47,7 @@ def call_llm_gemini(prompt: str, use_cache: bool = True) -> str:
     )
     
     # Use Flash model for better rate limits, fallback to your preferred model
-    model = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")  # Changed from gemini-2.5-pro-exp-03-25
+    model = os.getenv("GEMINI_MODEL", "gemini-2.5-pro-exp-03-25")  # Changed to gemini-1.5-flash from gemini-2.5-pro-exp-03-25
     
     max_retries = 3
     for attempt in range(max_retries):
@@ -86,6 +86,9 @@ def call_llm_gemini(prompt: str, use_cache: bool = True) -> str:
             else:
                 logger.error(f"Gemini API error: {e}")
                 raise e
+    
+    # If all retries failed, return a default response
+    return "No response received after retries"
 
 def call_llm_ollama(prompt: str, use_cache: bool = True) -> str:
     """Call local Ollama model"""
@@ -105,7 +108,7 @@ def call_llm_openai(prompt: str, use_cache: bool = True) -> str:
         model="gpt-4o-mini",  # Cost-effective option
         messages=[{"role": "user", "content": prompt}],
     )
-    response = r.choices[0].message.content
+    response = r.choices[0].message.content or "No response received"
     logger.info(f"OPENAI RESPONSE: {response[:100]}...")
     return response
 
@@ -120,7 +123,11 @@ def call_llm_anthropic(prompt: str, use_cache: bool = True) -> str:
             {"role": "user", "content": prompt}
         ]
     )
-    response_text = response.content[0].text
+    # Handle different content types
+    if hasattr(response.content[0], 'text'):
+        response_text = response.content[0].text
+    else:
+        response_text = str(response.content[0])
     logger.info(f"ANTHROPIC RESPONSE: {response_text[:100]}...")
     return response_text
 

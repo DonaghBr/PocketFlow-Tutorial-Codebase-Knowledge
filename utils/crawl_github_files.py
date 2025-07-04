@@ -5,7 +5,7 @@ import tempfile
 import git
 import time
 import fnmatch
-from typing import Union, Set, List, Dict, Tuple, Any
+from typing import Union, Set, List, Dict, Tuple, Any, Optional
 from urllib.parse import urlparse
 
 def crawl_github_files(
@@ -13,8 +13,8 @@ def crawl_github_files(
     token=None, 
     max_file_size: int = 1 * 1024 * 1024,  # 1 MB
     use_relative_paths: bool = False,
-    include_patterns: Union[str, Set[str]] = None,
-    exclude_patterns: Union[str, Set[str]] = None
+    include_patterns: Optional[Union[str, Set[str]]] = None,
+    exclude_patterns: Optional[Union[str, Set[str]]] = None
 ):
     """
     Crawl files from a specific path in a GitHub repository at a specific commit.
@@ -156,7 +156,7 @@ def crawl_github_files(
             return []
             
         if response.status_code != 200:
-            print(f"Error fetching the branches of {owner}/{path}: {response.status_code} - {response.text}")
+            print(f"Error fetching the branches of {owner}/{repo}: {response.status_code} - {response.text}")
             return []
 
         return response.json()
@@ -178,7 +178,18 @@ def crawl_github_files(
 
         # Fetching branches is not successfully
         if len(branches) == 0:
-            return
+            return {
+                "files": {},
+                "stats": {
+                    "downloaded_count": 0,
+                    "skipped_count": 0,
+                    "skipped_files": [],
+                    "base_path": None,
+                    "include_patterns": include_patterns,
+                    "exclude_patterns": exclude_patterns,
+                    "error": "Could not fetch branches"
+                }
+            }
 
         # To check branch name
         relevant_path = join_parts(3)
@@ -196,7 +207,18 @@ def crawl_github_files(
         if ref == None:
             print(f"The given path does not match with any branch and any tree in the repository.\n"
                   f"Please verify the path is exists.")
-            return
+            return {
+                "files": {},
+                "stats": {
+                    "downloaded_count": 0,
+                    "skipped_count": 0,
+                    "skipped_files": [],
+                    "base_path": None,
+                    "include_patterns": include_patterns,
+                    "exclude_patterns": exclude_patterns,
+                    "error": "Path does not match any branch or tree"
+                }
+            }
 
         # Combine all parts after the ref as the path
         part_index = 5 if '/' in ref else 4

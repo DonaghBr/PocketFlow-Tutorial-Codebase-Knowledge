@@ -43,7 +43,7 @@ def call_llm_gemini(prompt: str, use_cache: bool = True) -> str:
 
     # Initialize Gemini client
     client = genai.Client(
-        api_key=os.getenv("GEMINI_API_KEY", "AIzaSyDFkVWREIijOQKbKhA-7B1_Ons9MhLzQ2s"),
+        api_key=os.getenv("GEMINI_API_KEY", "your-api_key"),
     )
     
     # Use Flash model for better rate limits, fallback to your preferred model
